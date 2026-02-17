@@ -1,15 +1,45 @@
+VERSION = "0.1"
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 import sqlite3
 import csv
+import requests
+from packaging import version
 from ortools.linear_solver import pywraplp
 from reportlab.platypus import SimpleDocTemplate, Table
 from reportlab.lib.pagesizes import A4
 
 
-# --------------------------------------------------
-# DARK MODE STYLE
-# --------------------------------------------------
+def check_for_updates():
+    try:
+        url = "https://api.github.com/repos/DEIN_USERNAME/DEIN_REPO/releases/latest"
+        response = requests.get(url, timeout=5)
+
+        if response.status_code != 200:
+            messagebox.showerror("Fehler", "Update-Server nicht erreichbar.")
+            return
+
+        latest_version = response.json()["tag_name"].replace("v", "")
+
+        if version.parse(latest_version) > version.parse(VERSION):
+            messagebox.showinfo(
+                "Update verfügbar",
+                f"Neue Version verfügbar: {latest_version}\n"
+                f"Aktuelle Version: {VERSION}\n\n"
+                "Bitte neue Version von GitHub herunterladen."
+            )
+        else:
+            messagebox.showinfo(
+                "Kein Update",
+                f"Du verwendest die neueste Version ({VERSION})."
+            )
+
+    except Exception:
+        messagebox.showerror("Fehler", "Keine Internetverbindung.")
+
+
+
 def apply_dark_mode(root):
     style = ttk.Style(root)
     style.theme_use("default")
@@ -60,16 +90,10 @@ def apply_light_mode(root):
               foreground=[("selected", "#ffffff")])
 
 
-# --------------------------------------------------
-# DB
-# --------------------------------------------------
 def db_connect():
     return sqlite3.connect("projektwahl.db")
 
 
-# --------------------------------------------------
-# TAB: GRUPPEN
-# --------------------------------------------------
 class GroupsTab(ttk.Frame):
     def __init__(self, parent, status):
         super().__init__(parent)
@@ -99,9 +123,6 @@ class GroupsTab(ttk.Frame):
         self.status.set("Gruppe gespeichert ✔")
 
 
-# --------------------------------------------------
-# TAB: SCHÜLER
-# --------------------------------------------------
 class StudentsTab(ttk.Frame):
     def __init__(self, parent, status):
         super().__init__(parent)
@@ -141,9 +162,6 @@ class StudentsTab(ttk.Frame):
         self.status.set("Schüler gespeichert ✔")
 
 
-# --------------------------------------------------
-# TAB: GENERIEREN
-# --------------------------------------------------
 class GenerateTab(ttk.Frame):
     def __init__(self, parent, status):
         super().__init__(parent)
@@ -177,9 +195,7 @@ class GenerateTab(ttk.Frame):
         conn = db_connect()
         cur = conn.cursor()
 
-        # -----------------------
-        # Daten laden
-        # -----------------------
+
         cur.execute("SELECT id, klasse, choice1, choice2, choice3 FROM students")
         students = cur.fetchall()
 
@@ -192,30 +208,22 @@ class GenerateTab(ttk.Frame):
 
         solver = pywraplp.Solver.CreateSolver("CBC")
 
-        # -----------------------
-        # Variablen x[s,g]
-        # -----------------------
+
         x = {}
         for s in students:
             for g in groups:
                 x[(s[0], g[0])] = solver.IntVar(0, 1, f"x_{s[0]}_{g[0]}")
 
-        # -----------------------
-        # Jeder Schüler genau 1 Gruppe
-        # -----------------------
+
         for s in students:
             solver.Add(sum(x[(s[0], g[0])] for g in groups) == 1)
 
-        # -----------------------
-        # Gruppengröße MIN/MAX
-        # -----------------------
+
         for g in groups:
             solver.Add(sum(x[(s[0], g[0])] for s in students) <= MAX_S)
             solver.Add(sum(x[(s[0], g[0])] for s in students) >= MIN_S)
 
-        # -----------------------
-        # Klassenlimit pro Gruppe
-        # -----------------------
+
         klassen = list(set(s[1] for s in students))
 
         for g in groups:
@@ -224,9 +232,7 @@ class GenerateTab(ttk.Frame):
                     sum(x[(s[0], g[0])] for s in students if s[1] == k) <= MAX_K
                 )
 
-        # -----------------------
-        # Wunschgewichtung
-        # -----------------------
+
         objective = solver.Objective()
 
         for s in students:
@@ -246,23 +252,16 @@ class GenerateTab(ttk.Frame):
 
         objective.SetMaximization()
 
-        # -----------------------
-        # Solve
-        # -----------------------
+
         status = solver.Solve()
 
         if status != pywraplp.Solver.OPTIMAL:
             messagebox.showerror("Fehler", "Keine gültige Lösung gefunden.")
             return
 
-        # -----------------------
-        # Alte Zuweisungen löschen
-        # -----------------------
+
         cur.execute("DELETE FROM assignments")
 
-        # -----------------------
-        # Ergebnisse speichern
-        # -----------------------
         for s in students:
             sid = s[0]
             for g in groups:
@@ -280,11 +279,6 @@ class GenerateTab(ttk.Frame):
         messagebox.showinfo("Fertig", "Zuteilung wurde berechnet.")
 
 
-
-
-# --------------------------------------------------
-# TAB: BEARBEITEN
-# --------------------------------------------------
 class EditTab(ttk.Frame):
     def __init__(self, parent, status):
         super().__init__(parent)
@@ -454,9 +448,6 @@ class EditTab(ttk.Frame):
         )
 
 
-# --------------------------------------------------
-# MAIN APP
-# --------------------------------------------------
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -503,6 +494,10 @@ class App(tk.Tk):
                 "Support",
                 "E-Mail: yann@peroche.de\nmit Betreff: '11er Projekt'"
             )
+        )
+        help_menu.add_command(
+            label="Updates überprüfen",
+            command=check_for_updates
         )
 
 
