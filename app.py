@@ -1,5 +1,8 @@
 VERSION = "0.1"
+OWNER = "einfachy4nn"
+REPO = "11erProjekt_Gruppenfindung"
 
+import webbrowser
 import tkinter as tk
 from tkinter import ttk, messagebox
 import sqlite3
@@ -9,34 +12,144 @@ from packaging import version
 from ortools.linear_solver import pywraplp
 from reportlab.platypus import SimpleDocTemplate, Table
 from reportlab.lib.pagesizes import A4
+import os
+import sys
+import shutil
+
 
 
 def check_for_updates():
     try:
-        url = "https://api.github.com/repos/DEIN_USERNAME/DEIN_REPO/releases/latest"
+        url = f"https://api.github.com/repos/{OWNER}/{REPO}/releases/latest"
+
         response = requests.get(url, timeout=5)
 
-        if response.status_code != 200:
-            messagebox.showerror("Fehler", "Update-Server nicht erreichbar.")
+        print(response.status_code)  # Debug
+
+        if response.status_code == 404:
+            messagebox.showerror("Fehler", "Kein Release gefunden.")
             return
 
-        latest_version = response.json()["tag_name"].replace("v", "")
+        if response.status_code != 200:
+            messagebox.showerror("Fehler", f"GitHub Fehler: {response.status_code}")
+            return
+
+        data = response.json()
+
+        if "tag_name" not in data:
+            messagebox.showerror("Fehler", "Release hat kein tag_name.")
+            return
+
+        latest_version = data["tag_name"].replace("v", "")
 
         if version.parse(latest_version) > version.parse(VERSION):
-            messagebox.showinfo(
+            answer = messagebox.askyesno(
                 "Update verfügbar",
-                f"Neue Version verfügbar: {latest_version}\n"
-                f"Aktuelle Version: {VERSION}\n\n"
-                "Bitte neue Version von GitHub herunterladen."
+                f"Neuste Version: {latest_version}\n"
+                f"Aktuell: {VERSION}\n"
+                f"Willst du die neuste Version installieren?"
             )
+            if answer:
+                download_and_update(data)
+
         else:
             messagebox.showinfo(
                 "Kein Update",
-                f"Du verwendest die neueste Version ({VERSION})."
+                f"Du bist auf dem neuesten Stand ({VERSION})."
             )
 
-    except Exception:
-        messagebox.showerror("Fehler", "Keine Internetverbindung.")
+    except requests.exceptions.RequestException as e:
+        messagebox.showerror("Fehler", f"Netzwerkfehler:\n{e}")
+
+
+import os
+import sys
+import requests
+from tkinter import messagebox
+
+def download_and_update(release_data):
+    try:
+        assets = release_data.get("assets", [])
+        asset = next((a for a in assets if a["name"].endswith(".exe")), None)
+
+        if not asset:
+            messagebox.showerror("Fehler", "Keine .exe Datei im Release gefunden.")
+            return
+
+        download_url = asset["browser_download_url"]
+
+        response = requests.get(download_url, stream=True)
+        if response.status_code != 200:
+            messagebox.showerror("Fehler", "Download fehlgeschlagen.")
+            return
+
+        if not getattr(sys, 'frozen', False):
+            messagebox.showerror("Fehler", "Update funktioniert nur in der .exe Version.")
+            return
+
+        current_exe = os.path.abspath(sys.executable)
+        base_dir = os.path.dirname(current_exe)
+        exe_name = os.path.basename(current_exe)
+
+        new_exe_path = os.path.join(base_dir, exe_name + ".new")
+
+        with open(new_exe_path, "wb") as f:
+            for chunk in response.iter_content(8192):
+                f.write(chunk)
+
+        updater_path = os.path.join(base_dir, "updater.bat")
+
+        with open(updater_path, "w") as f:
+            f.write(f"""@echo off
+timeout /t 2 >nul
+del "{current_exe}"
+rename "{new_exe_path}" "{exe_name}"
+start "" "{current_exe}"
+del "%~f0"
+""")
+
+        os.startfile(updater_path)
+        sys.exit()
+
+    except Exception as e:
+        messagebox.showerror("Fehler", str(e))
+
+
+def help_window():
+    top = tk.Toplevel()
+    top.title("Hilfe")
+    top.geometry("350x250")
+    top.resizable(False, False)
+
+    label1 = tk.Label(
+        top,
+        text="Schreibe mir eine E-Mail mit dem Problem/Anliegen. Beschreibe das Problem so genau wie möglich bzw. lege zweifelshaft noch ein Video/Screenshot an.",
+        wraplength=320,
+    )
+    label1.pack(pady=(20, 10))
+
+    button1 = tk.Button(
+        top,
+        text="E-Mail schreiben.",
+        width=20,
+        command=lambda: webbrowser.open("mailto:yann@peroche.de?subject=11erProjekt%20Gruppenfindung%20Hilfe")
+    )
+    button1.pack(pady=5)
+
+    label2 = tk.Label(
+        top,
+        text="Melde den Fehler auf GitHub (Hierfür wird ein GitHub Konto benötigt).",
+        wraplength=320,
+    )
+    label2.pack(pady=(20, 10))
+
+    button2 = tk.Button(
+        top,
+        text="Auf GitHub melden.",
+        width=20,
+        command=lambda: webbrowser.open("https://github.com/einfachy4nn/11erProjekt_Gruppenfindung/issues")
+    )
+    button2.pack()
 
 
 
@@ -480,7 +593,7 @@ class App(tk.Tk):
         menubar.add_cascade(label="Navigieren", menu=navigate_menu)
 
         help_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Help", menu=help_menu)
+        menubar.add_cascade(label="Hilfe", menu=help_menu)
         help_menu.add_command(
             label="Über",
             command=lambda: messagebox.showinfo(
@@ -489,11 +602,12 @@ class App(tk.Tk):
             )
         )
         help_menu.add_command(
+            label="Dokumentation",
+            command=lambda: webbrowser.open("https://github.com/einfachy4nn/11erProjekt_Gruppenfindung/new/master?filename=README.md")
+        )
+        help_menu.add_command(
             label="Support",
-            command=lambda: messagebox.showinfo(
-                "Support",
-                "E-Mail: yann@peroche.de\nmit Betreff: '11er Projekt'"
-            )
+            command=lambda: help_window()
         )
         help_menu.add_command(
             label="Updates überprüfen",
