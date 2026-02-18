@@ -37,7 +37,7 @@ verwendet werden, beachtet dabei, dass dabei die Datenbank mit Daten an den Anbi
 
 ## GEPLANTE FEATURES
 
-gehosteter Server (von Schule?), damit alle gemeinsam daran arbeiten können
+gehosteter Server (von Schule?) für Datenbank, damit alle gemeinsam daran arbeiten können
 
 extra Seiten, wo für die 3 Tage Schichten/Räume eingetragen werden können
 
